@@ -1,4 +1,4 @@
-name: Build OnePlus Ace2 A14 Kernel
+name: Build OnePlus 12R A14 Kernel
 on:
   workflow_dispatch:
 
@@ -25,31 +25,28 @@ jobs:
 
     - name: Download kernel source
       run: |
-        git clone https://github.com/OnePlusOSS/android_kernel_modules_and_devicetree_oneplus_sm8475/ -b oneplus/sm8475_u_14.0.0_oneplus_ace_2 kernel_workspace --depth=1
+        git clone https://github.com/OnePlusOSS/android_kernel_modules_and_devicetree_oneplus_sm8550 -b oneplus/sm8550_u_14.0.0_oneplus_12r kernel_workspace --depth=1
         cd $GITHUB_WORKSPACE/kernel_workspace
         cd kernel_platform
-        git clone https://github.com/PoXiao777/android_kernel_oneplus_sm8475 common --depth=1    
+        git clone https://github.com/Klr1to/android_kernel_oneplus_sm8550diff common --depth=1
+        wget https://github.com/Klr1to/Kernel-Builder_Action/raw/main/patches/aston_defconfig
+        mv aston_defconfig common/arch/arm64/configs/gki_defconfig
+        
     - name: Download Clang-aosp
       run: |
         cd $GITHUB_WORKSPACE/kernel_workspace
         mkdir clang-aosp
-        wget https://android.googlesource.com/platform//prebuilts/clang/host/linux-x86/+archive/b669748458572622ed716407611633c5415da25c/clang-r416183b.tar.gz
-        tar -C clang-aosp/ -zxvf clang-r416183b.tar.gz
-
-        cd $GITHUB_WORKSPACE/kernel_workspace
-        mkdir gcc-aosp
-        wget https://android.googlesource.com/platform/prebuilts/gcc/linux-x86/aarch64/aarch64-linux-android-4.9/+archive/refs/heads/android-s-beta-5.tar.gz
-        tar -C gcc-aosp/ -zxvf android-s-beta-5.tar.gz
+        wget https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/refs/heads/master-kernel-build-2022/clang-r450784e.tar.gz
+        tar -C clang-aosp/ -zxvf clang-r450784e.tar.gz
 
     - name: Build kernel
       run: |
         cd $GITHUB_WORKSPACE/kernel_workspace
         KERNEL_DIR=./kernel_platform/common
         OUT_DIR=../../out
-        DEFCONFIG="gki_defconfig vendor/waipio_GKI.config"
+        DEFCONFIG="gki_defconfig"
         LTO=thin
-        export PATH="$GITHUB_WORKSPACE/kernel_workspace/clang-aosp/bin:$GITHUB_WORKSPACE/kernel_workspace/clang-aosp/bin:$PATH"
-        export CROSS_COMPILE=aarch64-linux-gnu-
+        export PATH=$GITHUB_WORKSPACE/kernel_workspace/clang-aosp/bin:$PATH
         export CLANG_TRIPLE=aarch64-linux-gnu-
         export ARCH=arm64
         export SUBARCH=arm64
@@ -64,6 +61,10 @@ jobs:
         scripts/config --file ${OUT_DIR}/.config -e LTO_CLANG -d LTO_NONE -e LTO_CLANG_THIN -d LTO_CLANG_FULL -e THINLTO
         THREAD=$(($(nproc --all) - 1))
         make -j"$THREAD" O=${OUT_DIR} "${TOOL_ARGS[@]}"
+        make -j"$THREAD" O=${OUT_DIR} "${TOOL_ARGS[@]}" INSTALL_MOD_PATH="." INSTALL_MOD_STRIP=1 modules_install
+        
+        rm -rf $GITHUB_WORKSPACE/kernel_workspace/out/lib/modules/5.15.123-custom+/build
+        rm -rf $GITHUB_WORKSPACE/kernel_workspace/out/lib/modules/5.15.123-custom+/source
         
     - name: Make Anykernel3
       run: |
@@ -77,8 +78,14 @@ jobs:
         name: Image
         path: kernel_workspace/out/arch/arm64/boot/Image
 
+    - name: Upload Modules
+      uses: actions/upload-artifact@v4
+      with:
+        name: Kmd-${{ env.BUILD_TIME }}
+        path: kernel_workspace/out/lib/modules/*
+
     - name: Upload AnyKernel3
       uses: actions/upload-artifact@v4
       with:
-        name: AK3-OPAce3-A14-${{ env.BUILD_TIME }}
+        name: AK3-OP12R-A14-${{ env.BUILD_TIME }}
         path: kernel_workspace/AnyKernel3/*
